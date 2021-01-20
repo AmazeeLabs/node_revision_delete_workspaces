@@ -1,0 +1,56 @@
+<?php
+
+use Drupal\Core\Entity\EntityInterface;
+use Drupal\Core\Entity\RevisionableInterface;
+
+/**
+ * @file
+ * Integration of the node revision delete module with workspaces.
+ */
+
+/**
+ * Implements hook_entity_revision_delete().
+ */
+function node_revision_delete_workspaces_entity_revision_delete(EntityInterface $revision) {
+  // When a revision gets deleted, we need to update the revision_parent and
+  // the revision_merge_parent fields. So basically, the two fields will be
+  // updated like this:
+  // - the parent of the current removed revision will become the parent of all
+  //   the children of the current removed revision (revision_parent field).
+  // - for the children which have the revision_merge_parent pointing to the
+  //   removed revision, the value will be set to the parent revision of the
+  //   currently removed revision.
+
+  $entityType = \Drupal::entityTypeManager()->getDefinition($revision->getEntityTypeId());
+  $revisionParentField = $entityType->getRevisionMetadataKey('revision_parent');
+  $revisionMergeParentField = $entityType->getRevisionMetadataKey('revision_merge_parent');
+  $entityIdField = $entityType->getKey('id');
+  $revisionTable = $entityType->getRevisionTable();
+  $connection = \Drupal::database();
+  if (!empty($revisionParentField) && $revision instanceof RevisionableInterface) {
+    $revisionParentId = $revision->get($revisionParentField)->getValue()[0]['target_revision_id'];
+    if (!empty($revisionParentId)) {
+      $connection->update($revisionTable)
+        ->fields([$revisionParentField => $revisionParentId])
+        ->condition($revisionParentField, $revision->getRevisionId())
+        ->execute();
+
+      if (!empty($revisionMergeParentField)) {
+        $connection->update($revisionTable)
+          ->fields([$revisionMergeParentField => $revisionParentId])
+          ->condition($revisionMergeParentField, $revision->getRevisionId())
+          ->execute();
+      }
+      // After the above operation, we may have cases when the revision parent and
+      // the revision merge parent fields are the same. In this case, just set
+      // the revision merge parent to NULL.
+      if (!empty($entityIdField)) {
+        $connection->update($revisionTable)
+          ->fields([$revisionMergeParentField => NULL])
+          ->condition($entityIdField, $revision->id())
+          ->where($revisionMergeParentField . '=' . $revisionParentField)
+          ->execute();
+      }
+    }
+  }
+}

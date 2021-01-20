@@ -1,0 +1,2 @@
+route_callbacks:
+  - '\Drupal\node_revision_delete_workspaces\Routing\RevisionsCleanupRoutes::routes'

@@ -1,0 +1,3 @@
+node_revision_delete_workspaces.local_tasks:
+  deriver: 'Drupal\node_revision_delete_workspaces\Plugin\Derivative\RevisionDeleteLocalTasks'
+  weight: 100
