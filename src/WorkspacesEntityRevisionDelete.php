@@ -2,6 +2,7 @@
 
 namespace Drupal\node_revision_delete_workspaces;
 
+use Drupal\Core\Database\Query\Condition;
 use Drupal\node_revision_delete\EntityRevisionDelete;
 
 /**
@@ -69,6 +70,18 @@ class WorkspacesEntityRevisionDelete extends EntityRevisionDelete {
       $offset_subquery->condition('more_recent_archived_revisions.' . $revision_parent_field, NULL, 'IS NOT NULL');
     }
 
+    // Ignore the revisions which are referenced by delivery items and are not
+    // completed (have nothing in the resolution field).
+    if (\Drupal::moduleHandler()->moduleExists('delivery')) {
+      $offset_subquery->leftJoin('delivery_item', 'di', 'di.entity_type = :entitytypeid AND di.source_revision = more_recent_archived_revisions.' . $revision_id, ['entitytypeid' => $entity_type]);
+      $condition = new Condition('OR');
+      // We allow revisions that are not part of a delivery item, or there is
+      // already a resolution for them.
+      $condition->condition('di.source_revision', NULL, 'IS NULL');
+      $condition->condition('di.resolution', NULL, 'IS NOT NULL');
+      $offset_subquery->condition($condition);
+    }
+
     $query->condition($offset_subquery, $content_type_config['minimum_revisions_to_keep'], '>');
     $query->condition($revision_date_id['revision_created'], $content_type_config['minimum_age_to_delete'], '<');
     // Only consider revisions from the current workspace.
@@ -79,6 +92,16 @@ class WorkspacesEntityRevisionDelete extends EntityRevisionDelete {
     // Also, make sure that we ignore the root revision.
     if (!empty($revision_parent_field)) {
       $query->condition('r.' . $revision_parent_field, NULL, 'IS NOT NULL');
+    }
+
+    // Same as above, ignore the revisions which are referenced by delivery
+    // items and are not completed (have nothing in the resolution field).
+    if (\Drupal::moduleHandler()->moduleExists('delivery')) {
+      $query->leftJoin('delivery_item', 'di', 'di.entity_type = :entitytypeid AND di.source_revision = r.' . $revision_id, ['entitytypeid' => $entity_type]);
+      $condition = new Condition('OR');
+      $condition->condition('di.source_revision', NULL, 'IS NULL');
+      $condition->condition('di.resolution', NULL, 'IS NOT NULL');
+      $query->condition($condition);
     }
 
     return $query->execute()->fetchCol();
@@ -98,6 +121,7 @@ class WorkspacesEntityRevisionDelete extends EntityRevisionDelete {
     $revision_table_id = $entity_type_definition->getRevisionTable();
     $entity_id = $entity_type_definition->getKey('id');
     $bundle_id = $entity_type_definition->getKey('bundle');
+    $revision_id = $entity_type_definition->getKey('revision');
     $revision_date_id = $entity_type_definition->get('revision_metadata_keys');
     $active_workspace_id = \Drupal::service('workspaces.manager')->getActiveWorkspace()->id();
     $revision_parent_field = $entity_type_definition->getRevisionMetadataKey('revision_parent');
@@ -118,6 +142,17 @@ class WorkspacesEntityRevisionDelete extends EntityRevisionDelete {
       // Also, make sure that we ignore the root revision.
       if (!empty($revision_parent_field)) {
         $query->condition('r.' . $revision_parent_field, NULL, 'IS NOT NULL');
+      }
+
+      // Same as in ::getCandidatesRevisionsQuery, ignore the revisions which
+      // are referenced by delivery items and are not completed (have nothing in
+      // the resolution field).
+      if (\Drupal::moduleHandler()->moduleExists('delivery')) {
+        $query->leftJoin('delivery_item', 'di', 'di.entity_type = :entitytypeid AND di.source_revision = r.' . $revision_id, ['entitytypeid' => $entity_type]);
+        $condition = new Condition('OR');
+        $condition->condition('di.source_revision', NULL, 'IS NULL');
+        $condition->condition('di.resolution', NULL, 'IS NOT NULL');
+        $query->condition($condition);
       }
 
       // Allow other modules to alter candidates query.
