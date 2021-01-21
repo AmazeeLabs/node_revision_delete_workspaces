@@ -3,27 +3,16 @@
 namespace Drupal\node_revision_delete_workspaces\Controller;
 
 use Drupal\Core\Batch\BatchBuilder;
-use Drupal\Core\Entity\ContentEntityInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Form\ConfirmFormBase;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Url;
+use Drupal\node_revision_delete\EntityRevisionDeleteInterface;
 use Drupal\node_revision_delete_workspaces\WorkspacesEntityRevisionDeleteBatch;
 use Drupal\workspaces\WorkspaceManagerInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
-/**
- * Controller for the revisions cleanup of an entity.
- *
- * Class RevisionsCleanup
- * @package Drupal\node_revision_delete_workspaces\Controller
- */
-class RevisionsCleanupConfirmForm extends ConfirmFormBase {
-
-  /**
-   * @var ContentEntityInterface
-   */
-  protected $entity;
+class RevisionsCleanupAllConfirmForm extends ConfirmFormBase {
 
   /**
    * @var WorkspaceManagerInterface
@@ -36,11 +25,17 @@ class RevisionsCleanupConfirmForm extends ConfirmFormBase {
   protected $entityTypeManager;
 
   /**
+   * @var EntityRevisionDeleteInterface
+   */
+  protected $entityRevisionDelete;
+
+  /**
    * RevisionsCleanupConfirmForm constructor.
    */
-  public function __construct(WorkspaceManagerInterface $workspace_manager, EntityTypeManagerInterface $entity_type_manager) {
+  public function __construct(WorkspaceManagerInterface $workspace_manager, EntityTypeManagerInterface $entity_type_manager, EntityRevisionDeleteInterface $entity_revision_delete) {
     $this->workspaceManager = $workspace_manager;
     $this->entityTypeManager = $entity_type_manager;
+    $this->entityRevisionDelete = $entity_revision_delete;
   }
 
   /**
@@ -49,37 +44,30 @@ class RevisionsCleanupConfirmForm extends ConfirmFormBase {
   public static function create(ContainerInterface $container){
     return new static(
       $container->get('workspaces.manager'),
-      $container->get('entity_type.manager')
+      $container->get('entity_type.manager'),
+      $container->get('entity_revision_delete')
     );
   }
 
   /**
    * {@inheritDoc}
    */
-  public function buildForm(array $form, FormStateInterface $form_state, $entity_type_id = NULL) {
-    $this->entity = $this->getRouteMatch()->getParameter($entity_type_id);
-    return parent::buildForm($form, $form_state);
-  }
-
-  /**
-   * {@inheritDoc}
-   */
   public function getQuestion() {
-    return $this->t('Do you want to cleanup the revisions for this content?');
+    return $this->t('Are you sure you want to cleanup all the revisions from all the workspaces?');
   }
 
   /**
    * {@inheritDoc}
    */
   public function getCancelUrl() {
-    return new Url('entity.' . $this->entity->getEntityTypeId() . '.canonical', [$this->entity->getEntityTypeId() => $this->entity->id()]);
+    return new Url('<front>');
   }
 
   /**
    * {@inheritDoc}
    */
   public function getFormId() {
-    return 'revisions_cleanup_confirm_form';
+    return 'revisions_cleanup_confirm_form_all';
   }
 
   /**
@@ -92,10 +80,20 @@ class RevisionsCleanupConfirmForm extends ConfirmFormBase {
       ->setFinishCallback([WorkspacesEntityRevisionDeleteBatch::class, 'finish'])
       ->setInitMessage($this->t('Starting to cleanup revisions'));
     foreach ($workspaces as $workspace) {
-      $batch->addOperation(
-        [WorkspacesEntityRevisionDeleteBatch::class, 'executeForWorkspace'],
-        [$workspace->id(), $this->entity->getEntityTypeId(), $this->entity->bundle(), $this->entity->id()]
-      );
+      $this->workspaceManager->executeInWorkspace($workspace->id(), function() use ($batch, $workspace) {
+        $content_types = $this->entityRevisionDelete->getConfiguredContentTypes();
+        foreach ($content_types as $content_type => $bundles); {
+          foreach ($bundles as $bundle) {
+            $candidates = $this->entityRevisionDelete->getCandidatesNodes($content_type, $bundle);
+            foreach ($candidates as $entity_id) {
+              $batch->addOperation(
+                [WorkspacesEntityRevisionDeleteBatch::class, 'executeForWorkspace'],
+                [$workspace->id(), $content_type, $bundle, $entity_id]
+              );
+            }
+          }
+        }
+      });
     }
     batch_set($batch->toArray());
   }

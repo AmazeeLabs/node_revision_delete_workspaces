@@ -1,2 +1,11 @@
+node_revision_delete_workspaces.clean_them_all:
+  path: '/admin/config/content/node_revision_delete/cleanup_all_entities'
+  defaults:
+    _form: '\Drupal\node_revision_delete_workspaces\Controller\RevisionsCleanupAllConfirmForm'
+    _title: 'Cleanup all revisions'
+  requirements:
+    _permission: 'administer node_revision_delete'
+
+
 route_callbacks:
   - '\Drupal\node_revision_delete_workspaces\Routing\RevisionsCleanupRoutes::routes'
