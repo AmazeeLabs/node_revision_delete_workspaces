@@ -82,7 +82,7 @@ class RevisionsCleanupAllConfirmForm extends ConfirmFormBase {
     foreach ($workspaces as $workspace) {
       $this->workspaceManager->executeInWorkspace($workspace->id(), function() use ($batch, $workspace) {
         $content_types = $this->entityRevisionDelete->getConfiguredContentTypes();
-        foreach ($content_types as $content_type => $bundles); {
+        foreach ($content_types as $content_type => $bundles) {
           foreach ($bundles as $bundle) {
             $candidates = $this->entityRevisionDelete->getCandidatesNodes($content_type, $bundle);
             foreach ($candidates as $entity_id) {
