@@ -1,0 +1,6 @@
+services:
+  node_revision_delete_workspaces.commands:
+    class: Drupal\node_revision_delete_workspaces\Commands\RevisionCleanupCommands
+    tags:
+      - { name: drush.command }
+    arguments: ['@entity_type.manager', '@workspaces.manager', '@entity_revision_delete']
