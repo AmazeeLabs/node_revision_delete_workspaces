@@ -70,11 +70,29 @@ class RevisionsCleanupAllConfirmForm extends ConfirmFormBase {
     return 'revisions_cleanup_confirm_form_all';
   }
 
+  public function buildForm(array $form, FormStateInterface $form_state, $entity_type_id = NULL) {
+    $workspaces = $this->entityTypeManager->getStorage('workspace')->loadMultiple();
+    $options = [
+      '--all_workspaces--' => $this->t('All workspaces'),
+    ];
+    foreach ($workspaces as $workspace) {
+      $options[$workspace->id()] = $workspace->label();
+    }
+    $form['workspaces'] = [
+      '#title' => $this->t('Workspace'),
+      '#type' => 'checkboxes',
+      '#options' => $options,
+    ];
+    return parent::buildForm($form, $form_state);
+  }
+
   /**
    * {@inheritDoc}
    */
   public function submitForm(array &$form, FormStateInterface $form_state) {
-    $workspaces = $this->entityTypeManager->getStorage('workspace')->loadMultiple();
+    $selected_workspace_ids = array_filter($form_state->getValue('workspaces'));
+    $workspace_ids = in_array('--all_workspaces--', $selected_workspace_ids) ? NULL : $selected_workspace_ids;
+    $workspaces = $this->entityTypeManager->getStorage('workspace')->loadMultiple($workspace_ids);
     $batch = (new BatchBuilder())
       ->setTitle($this->t('Revisions cleanup'))
       ->setFinishCallback([WorkspacesEntityRevisionDeleteBatch::class, 'finish'])
