@@ -25,6 +25,7 @@ class WorkspacesEntityRevisionDelete extends EntityRevisionDelete {
     $revision_date_id = $entity_type_definition->get('revision_metadata_keys');
     $bundle_id = $entity_type_definition->getKey('bundle');
     $revision_parent_field = $entity_type_definition->getRevisionMetadataKey('revision_parent');
+    $revision_merge_parent_field = $entity_type_definition->getRevisionMetadataKey('revision_merge_parent');
 
     // Hotfix to remove the ONLY_FULL_GROUP_BY flag.
     // See: https://www.drupal.org/project/drupal/issues/2989922#comment-13060134
@@ -93,6 +94,14 @@ class WorkspacesEntityRevisionDelete extends EntityRevisionDelete {
     if (!empty($revision_parent_field)) {
       $query->condition('r.' . $revision_parent_field, NULL, 'IS NOT NULL');
     }
+
+    // Only consider revisions which are not revision merge parents for other
+    // revisions, as they are safer to be removed. Also, we exclude revisions
+    // which are parents for revisions in other workspaces.
+    $rmp_subquery = $this->connection->select($revision_table_id, 'rmp');
+    $rmp_subquery->addExpression('COUNT(1)');
+    $rmp_subquery->where("rmp.$revision_merge_parent_field = r.$revision_id OR (rmp.$revision_parent_field = r.$revision_id AND rmp.workspace <> r.workspace)");
+    $query->condition($rmp_subquery, '0', '=');
 
     // Same as above, ignore the revisions which are referenced by delivery
     // items and are not completed (have nothing in the resolution field).

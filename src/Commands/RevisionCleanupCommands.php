@@ -42,10 +42,15 @@ class RevisionCleanupCommands extends DrushCommands {
    *
    * @option workspaces A comma separated list of workspaces.
    * @option entity_types A comma separated list of entity types.
+   * @option entity_ids A comma separated list of entity ids.
+   * @option dry-run If the actual deletion of revision should not happen, but
+   * just be reported. This is however not entirely accurate, since by removing
+   * revisions we can afterwards enable other revisions to be removed (the ones
+   * that are not a merge parent revision for others for example).
    *
    * @command entity-revision-cleanup-workspaces
    */
-  public function revisionsCleanup($options = ['workspaces' => '', 'entity_types' => '']) {
+  public function revisionsCleanup($options = ['workspaces' => '', 'entity_types' => '', 'entity_ids' => '', 'dry-run' => FALSE]) {
     if (!empty($options['workspaces'])) {
       $workspace_ids = explode(',', $options['workspaces']);
     } else {
@@ -59,10 +64,18 @@ class RevisionCleanupCommands extends DrushCommands {
     } else {
       $entity_types = array_keys($configured_entity_types);
     }
+    $entity_ids = NULL;
+    if (!empty($options['entity_ids'])) {
+      $entity_ids = explode(',', $options['entity_ids']);
+    }
+    $dry_run = $options['dry-run'];
     $batch = (new BatchBuilder())
       ->setTitle($this->t('Revisions cleanup'))
       ->setFinishCallback([WorkspacesEntityRevisionDeleteBatch::class, 'finish'])
       ->setInitMessage($this->t('Starting to cleanup revisions'));
+
+    /* @var WorkspaceManagerInterface $workspacesManager */
+    $workspacesManager = \Drupal::getContainer()->get('workspaces.manager');
 
     foreach ($workspace_ids as $workspace_id) {
       foreach ($entity_types as $entity_type) {
@@ -70,11 +83,16 @@ class RevisionCleanupCommands extends DrushCommands {
           continue;
         }
         foreach ($configured_entity_types[$entity_type] as $bundle) {
-          $candidates = $this->entityRevisionDelete->getCandidatesNodes($entity_type, $bundle);
+          $candidates = $workspacesManager->executeInWorkspace($workspace_id, function() use ($entity_type, $bundle) {
+            return $this->entityRevisionDelete->getCandidatesNodes($entity_type, $bundle);
+          });
           foreach ($candidates as $entity_id) {
+            if (!empty($entity_ids) && !in_array($entity_id, $entity_ids)) {
+              continue;
+            }
             $batch->addOperation(
               [WorkspacesEntityRevisionDeleteBatch::class, 'executeForWorkspace'],
-              [$workspace_id, $entity_type, $bundle, $entity_id]
+              [$workspace_id, $entity_type, $bundle, $entity_id, $dry_run]
             );
           }
         }

@@ -6,11 +6,11 @@ use Drupal\workspaces\WorkspaceManagerInterface;
 
 class WorkspacesEntityRevisionDeleteBatch {
 
-  public static function executeForWorkspace($workspace_id, $entity_type_id, $entity_bundle, $entity_id, &$context) {
+  public static function executeForWorkspace($workspace_id, $entity_type_id, $entity_bundle, $entity_id, $dry_run, &$context) {
     try {
       /* @var WorkspaceManagerInterface $workspacesManager */
       $workspacesManager = \Drupal::getContainer()->get('workspaces.manager');
-      $workspacesManager->executeInWorkspace($workspace_id, function() use ($context, $workspace_id, $entity_type_id, $entity_bundle, $entity_id) {
+      $workspacesManager->executeInWorkspace($workspace_id, function() use ($context, $workspace_id, $entity_type_id, $entity_bundle, $entity_id, $dry_run) {
         if (empty($context['sandbox'])) {
           $candidate_revisions = \Drupal::getContainer()->get('entity_revision_delete')->getCandidatesRevisionsByIds($entity_type_id, $entity_bundle, [$entity_id]);
           $context['sandbox']['progress'] = 0;
@@ -20,7 +20,10 @@ class WorkspacesEntityRevisionDeleteBatch {
         $index = $context['sandbox']['progress'];
         if (!empty($context['sandbox']['candidate_revisions'][$index])) {
           $revision_id = $context['sandbox']['candidate_revisions'][$index];
-          \Drupal::entityTypeManager()->getStorage($entity_type_id)->deleteRevision($revision_id);
+          if (!$dry_run) {
+            \Drupal::entityTypeManager()->getStorage($entity_type_id)->deleteRevision($revision_id);
+          }
+          $context['results']['removed_revisions'][$workspace_id][] = $revision_id;
         }
         $context['sandbox']['progress']++;
         $context['message'] = \Drupal::translation()->translate('Cleaning up for workspace: @workspace and @entity_type_id: @entity_id', [
@@ -33,8 +36,8 @@ class WorkspacesEntityRevisionDeleteBatch {
     } catch (\Exception $e) {
       // @todo: log maybe the exception?
     }
-    if ($context['sandbox']['progress'] < count($context['sandbox']['candidate_revisions']) -1 ) {
-      $context['finished'] = $context['sandbox']['progress'] / (count($context['sandbox']['candidate_revisions']) -1);
+    if ($context['sandbox']['progress'] < count($context['sandbox']['candidate_revisions'])) {
+      $context['finished'] = $context['sandbox']['progress'] / (count($context['sandbox']['candidate_revisions']));
     } else {
       $context['finished'] = 1;
     }
@@ -47,6 +50,11 @@ class WorkspacesEntityRevisionDeleteBatch {
     $messenger = \Drupal::messenger();
     if ($success) {
       $messenger->addMessage(t('The operation succeeded.'));
+      if (isset($results['removed_revisions'])) {
+        foreach ($results['removed_revisions'] as $workspace_id => $revisions) {
+          $messenger->addMessage(t('@count revisions have been removed for workspace @workspace', ['@workspace' => $workspace_id,  '@count' => count($revisions)]));
+        }
+      }
     }
     else {
       // An error occurred.
