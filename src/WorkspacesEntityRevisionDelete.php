@@ -156,13 +156,15 @@ class WorkspacesEntityRevisionDelete extends EntityRevisionDelete {
       // Same as in ::getCandidatesRevisionsQuery, ignore the revisions which
       // are referenced by delivery items and are not completed (have nothing in
       // the resolution field).
-      if (\Drupal::moduleHandler()->moduleExists('delivery')) {
+      // Disabled for now as it slows down the query quite a lot. The delivery
+      // items will be anyway ignored in the getCandidatesRevisionsQuery().
+      /*if (\Drupal::moduleHandler()->moduleExists('delivery')) {
         $query->leftJoin('delivery_item', 'di', 'di.entity_type = :entitytypeid AND di.source_revision = r.' . $revision_id, ['entitytypeid' => $entity_type]);
         $condition = new Condition('OR');
         $condition->condition('di.source_revision', NULL, 'IS NULL');
         $condition->condition('di.resolution', NULL, 'IS NOT NULL');
         $query->condition($condition);
-      }
+      }*/
 
       // Allow other modules to alter candidates query.
       $query->addTag('node_revision_delete_candidates');
