@@ -1,7 +1,7 @@
 name: 'Node Revision Delete Workspaces'
 type: module
 description: 'Integration of the node revision delete module with workspaces.'
-core_version_requirement: ^8 || ^9
+core_version_requirement: ^8 || ^9 || ^10
 dependencies:
   - node_revision_delete
   - workspaces
