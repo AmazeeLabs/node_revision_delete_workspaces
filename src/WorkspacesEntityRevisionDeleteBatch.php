@@ -2,15 +2,19 @@
 
 namespace Drupal\node_revision_delete_workspaces;
 
-use Drupal\workspaces\WorkspaceManagerInterface;
-
+/**
+ *
+ */
 class WorkspacesEntityRevisionDeleteBatch {
 
+  /**
+   *
+   */
   public static function executeForWorkspace($workspace_id, $entity_type_id, $entity_bundle, $entity_id, $dry_run, &$context) {
     try {
-      /* @var WorkspaceManagerInterface $workspacesManager */
+      /** @var WorkspaceManagerInterface $workspacesManager */
       $workspacesManager = \Drupal::getContainer()->get('workspaces.manager');
-      $workspacesManager->executeInWorkspace($workspace_id, function() use ($context, $workspace_id, $entity_type_id, $entity_bundle, $entity_id, $dry_run) {
+      $workspacesManager->executeInWorkspace($workspace_id, function () use ($context, $workspace_id, $entity_type_id, $entity_bundle, $entity_id, $dry_run) {
         if (empty($context['sandbox'])) {
           $candidate_revisions = \Drupal::getContainer()->get('entity_revision_delete')->getCandidatesRevisionsByIds($entity_type_id, $entity_bundle, [$entity_id]);
           $context['sandbox']['progress'] = 0;
@@ -27,18 +31,24 @@ class WorkspacesEntityRevisionDeleteBatch {
         }
         $context['sandbox']['progress']++;
         $context['message'] = \Drupal::translation()->translate('Cleaning up for workspace: @workspace and @entity_type_id: @entity_id', [
-            '@workspace' => $workspace_id,
-            '@entity_type_id' => $entity_type_id,
-            '@entity_id' => $entity_id
-          ]
+          '@workspace' => $workspace_id,
+          '@entity_type_id' => $entity_type_id,
+          '@entity_id' => $entity_id,
+        ]
         );
       });
-    } catch (\Exception $e) {
-      // @todo: log maybe the exception?
     }
-    if ($context['sandbox']['progress'] < count($context['sandbox']['candidate_revisions'])) {
+    catch (\Exception $e) {
+      // @todo log maybe the exception?
+    }
+    if (
+      isset($context['sandbox']['progress']) &&
+      isset($context['sandbox']['candidate_revisions']) &&
+      is_countable($context['sandbox']['candidate_revisions']) &&
+      $context['sandbox']['progress'] < count($context['sandbox']['candidate_revisions'])) {
       $context['finished'] = $context['sandbox']['progress'] / (count($context['sandbox']['candidate_revisions']));
-    } else {
+    }
+    else {
       $context['finished'] = 1;
     }
   }
@@ -52,7 +62,7 @@ class WorkspacesEntityRevisionDeleteBatch {
       $messenger->addMessage(t('The operation succeeded.'));
       if (isset($results['removed_revisions'])) {
         foreach ($results['removed_revisions'] as $workspace_id => $revisions) {
-          $messenger->addMessage(t('@count revisions have been removed for workspace @workspace', ['@workspace' => $workspace_id,  '@count' => count($revisions)]));
+          $messenger->addMessage(t('@count revisions have been removed for workspace @workspace', ['@workspace' => $workspace_id, '@count' => count($revisions)]));
         }
       }
     }
@@ -67,4 +77,5 @@ class WorkspacesEntityRevisionDeleteBatch {
       $messenger->addError($message);
     }
   }
+
 }
